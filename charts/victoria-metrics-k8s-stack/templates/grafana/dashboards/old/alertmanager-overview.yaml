@@ -1,26 +1,52 @@
 {{- /*
 Generated from 'alertmanager-overview' from https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/main/manifests/grafana-dashboardDefinitions.yaml
 Do not change in-place! In order to change this file first read following link:
-https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack/hack
+https://github.com/VictoriaMetrics/helm-charts/tree/master/charts/victoria-metrics-k8s-stack/hack
 */ -}}
-{{- $kubeTargetVersion := default .Capabilities.KubeVersion.GitVersion .Values.kubeTargetVersionOverride }}
-{{- if and (or .Values.grafana.enabled .Values.grafana.forceDeployDashboards) (semverCompare ">=1.14.0-0" $kubeTargetVersion) (semverCompare "<9.9.9-9" $kubeTargetVersion) .Values.grafana.defaultDashboardsEnabled }}
-{{- if and .Values.alertmanager.enabled .Values.alertmanager.serviceMonitor.selfMonitor }}
+{{- if .Values.defaultDashboardsEnabled }}
+{{- if .Values.grafanaOperatorDashboardsFormat.enabled }}
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  namespace: {{ .Release.Namespace }}
+  name: {{ printf "%s-%s" (include "victoria-metrics-k8s-stack.fullname" $) "alertmanager-overview" | trunc 63 | trimSuffix "-" | trimSuffix "." }}
+  labels:
+    app: {{ include "victoria-metrics-k8s-stack.name" $ }}-grafana
+    {{- include "victoria-metrics-k8s-stack.labels" $ | nindent 4 }}
+spec:
+  {{- with .Values.grafanaOperatorDashboardsFormat.instanceSelector }}
+  instanceSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if .Values.grafanaOperatorDashboardsFormat.allowCrossNamespaceImport }}
+  allowCrossNamespaceImport: true
+  {{- end }}
+{{- else }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  namespace: {{ .Values.grafana.defaultDashboards.namespace }}
-  name: {{ printf "%s-%s" (include "kube-prometheus-stack.fullname" $) "alertmanager-overview" | trunc 63 | trimSuffix "-" }}
-  annotations:
-{{ toYaml .Values.grafana.sidecar.dashboards.annotations | indent 4 }}
+  namespace: {{ .Release.Namespace }}
+  name: {{ printf "%s-%s" (include "victoria-metrics-k8s-stack.fullname" $) "alertmanager-overview" | trunc 63 | trimSuffix "-" | trimSuffix "." }}
   labels:
     {{- if $.Values.grafana.sidecar.dashboards.label }}
-    {{ $.Values.grafana.sidecar.dashboards.label }}: {{ ternary $.Values.grafana.sidecar.dashboards.labelValue "1" (not (empty $.Values.grafana.sidecar.dashboards.labelValue)) | quote }}
+    {{ $.Values.grafana.sidecar.dashboards.label }}: "1"
     {{- end }}
-    app: {{ template "kube-prometheus-stack.name" $ }}-grafana
-{{ include "kube-prometheus-stack.labels" $ | indent 4 }}
+    {{- if $.Values.grafana.sidecar.dashboards.additionalDashboardLabels }}
+    {{- range $key, $val := .Values.grafana.sidecar.dashboards.additionalDashboardLabels }}
+    {{ $key }}: {{ $val | quote }}
+    {{- end }}
+    {{- end }}
+    app: {{ include "victoria-metrics-k8s-stack.name" $ }}-grafana
+    {{- include "victoria-metrics-k8s-stack.labels" $ | nindent 4 }}
+    {{- if $.Values.grafana.sidecar.dashboards.additionalDashboardAnnotations }}
+  annotations:
+    {{- range $key, $val := .Values.grafana.sidecar.dashboards.additionalDashboardAnnotations }}
+    {{ $key }}: {{ $val | quote }}
+    {{- end }}
+    {{- end }}
 data:
-  alertmanager-overview.json: |-
+{{- end }}
+  {{ if not .Values.grafanaOperatorDashboardsFormat.enabled }}alertmanager-overview.{{ end }}json:  |-
     {
         "__inputs": [
 
@@ -475,7 +501,8 @@ data:
         "schemaVersion": 14,
         "style": "dark",
         "tags": [
-            "alertmanager-mixin"
+            "alertmanager-mixin",
+            "vm-k8s-stack"
         ],
         "templating": {
             "list": [
@@ -490,7 +517,7 @@ data:
                     "options": [
 
                     ],
-                    "query": "prometheus",
+                    "query": "{{ default "prometheus" .Values.grafana.defaultDatasourceType }}",
                     "refresh": 1,
                     "regex": "",
                     "type": "datasource"
@@ -612,5 +639,4 @@ data:
         "uid": "alertmanager-overview",
         "version": 0
     }
-{{- end }}
 {{- end }}
